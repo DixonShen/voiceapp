@@ -7,7 +7,6 @@ import android.os.Bundle;
 import android.view.Window;
 import android.view.WindowManager;
 
-import com.suda.helloworld.R;
 
 
 public class HelloWorld extends Activity {

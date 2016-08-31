@@ -11,7 +11,6 @@ import android.view.View.OnClickListener;
 import android.widget.Button;
 import android.widget.EditText;
 
-import com.suda.helloworld.R;
 
 public class SecondActivity extends Activity {
     private EditText editText;

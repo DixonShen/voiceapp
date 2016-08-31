@@ -4,16 +4,29 @@ import android.app.Activity;
 import android.content.Context;
 import android.os.Bundle;
 import android.text.method.ScrollingMovementMethod;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
+import android.widget.Toast;
 
-import com.suda.helloworld.R;
+
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import com.iflytek.cloud.ErrorCode;
+import com.iflytek.cloud.InitListener;
+import com.iflytek.cloud.RecognizerResult;
+import com.iflytek.cloud.SpeechConstant;
+import com.iflytek.cloud.SpeechError;
+import com.iflytek.cloud.SpeechUtility;
+import com.iflytek.cloud.ui.RecognizerDialog;
+import com.iflytek.cloud.ui.RecognizerDialogListener;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +40,10 @@ public class MainActivity extends Activity {
     private List<ChatMessage> mData;
     private ChatAdapter mAdapter;
     private TextView preQuestions;
+    private RecognizerDialog iatDialog;
+    private ListView mList;
+    private List<ChatMessage> messageList = new ArrayList<ChatMessage>();
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -41,11 +58,13 @@ public class MainActivity extends Activity {
         preQuestions = (TextView)findViewById(R.id.preQuestions);
         preQuestions.setMovementMethod(new ScrollingMovementMethod());
 
-        ListView mList = (ListView) findViewById(R.id.list);
-        mData = new ArrayList<ChatMessage>();
-        mData = LoadData();
-        mAdapter = new ChatAdapter(MainActivity.this,mData);
-        mList.setAdapter(mAdapter);
+        mList = (ListView) findViewById(R.id.list);
+
+        initData();
+//        mData = new ArrayList<ChatMessage>();
+//        mData = LoadData();
+//        mAdapter = new ChatAdapter(MainActivity.this,mData);
+//        mList.setAdapter(mAdapter);
 
         editView.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -72,12 +91,67 @@ public class MainActivity extends Activity {
                 }
             }
         });
+
+        //点击语音输入
+        voiceView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                //语音配置对象初始化
+                SpeechUtility.createUtility(
+                        MainActivity.this, SpeechConstant.APPID + "=57b428c3");
+                //有交互动画的语音识别器
+                iatDialog = new RecognizerDialog(MainActivity.this, mInitListener);
+                iatDialog.setListener(new RecognizerDialogListener() {
+                    String resultJson = "[";
+                    @Override
+                    public void onResult(RecognizerResult recognizerResult, boolean isLast) {
+                        System.out.println("-----------------   onResult   -----------------");
+                        if (!isLast){
+                            resultJson += recognizerResult.getResultString() + ",";
+                        } else {
+                            resultJson += recognizerResult.getResultString() + "]";
+                        }
+
+                        if (isLast) {
+                            //解析语音识别后返回的json格式字符串
+                            Gson gson = new Gson();
+                            List<DictationResult> resultList = gson.fromJson(resultJson,
+                                    new TypeToken<List<DictationResult>>(){
+                                    }.getType());
+                            String result = "";
+                            for (int i=0; i<resultList.size()-1; i++){
+                                result += resultList.get(i).toString();
+                            }
+                            send(result);
+                        }
+                    }
+
+                    @Override
+                    public void onError(SpeechError speechError) {
+                        speechError.getPlainDescription(true);
+                    }
+                });
+
+                iatDialog.show();
+            }
+        });
+
+        //第position项被点击是触发该方法
+        mList.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+
+            }
+        });
+
+        //文字输入模式发送按钮
         send.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
 
             }
         });
+
         //点击屏幕其他地方 隐藏输入框
         findViewById(R.id.mainpage).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -90,6 +164,28 @@ public class MainActivity extends Activity {
 
     }
 
+    /**
+     * 加载历史消息，后期从数据库中读取
+     */
+    public void initData(){
+        ChatMessage Entity = new ChatMessage(0,"欢迎回来，很高兴为您服务！");
+        messageList.add(Entity);
+        mAdapter = new ChatAdapter(MainActivity.this,messageList);
+        mList.setAdapter(mAdapter);
+    }
+
+    public static final String TAG = "MainActivity";
+    private InitListener mInitListener = new InitListener() {
+        @Override
+        public void onInit(int code) {
+            Log.d(TAG, "SpeechRecognizer init() code = " + code);
+            if (code != ErrorCode.SUCCESS){
+                Toast.makeText(MainActivity.this, "初始化失败，错误码：" + code,
+                        Toast.LENGTH_SHORT).show();
+            }
+        }
+    };
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
@@ -98,6 +194,28 @@ public class MainActivity extends Activity {
         }
         return super.onKeyDown(keyCode, event);
     }
+
+    /**
+     * 发送消息
+     * @param m the content of the message
+     */
+    public void send(String m){
+        ChatMessage Entity = new ChatMessage(1,m);
+        messageList.add(Entity);
+        mAdapter.notifyDataSetChanged();  // 通知ListView，数据已发生改变
+
+        editText.setText("");//清空输入框
+        mList.smoothScrollToPosition(mList.getCount()-1);//发送一条消息时，ListView显示选择则后一项
+    }
+
+//    /**
+//     * 发送文字输入的消息
+//     */
+//    public void send(){
+//
+//    }
+
+    //聊天框样式展示
     private List<ChatMessage> LoadData()
     {
         List<ChatMessage> Messages=new ArrayList<ChatMessage>();
